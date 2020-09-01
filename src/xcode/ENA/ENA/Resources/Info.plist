@@ -5,7 +5,6 @@
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).exposure-notification</string>
-		<string>$(PRODUCT_BUNDLE_IDENTIFIER).fetch-test-results</string>
 	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
@@ -17,6 +16,10 @@
 	<string>de.rki.coronawarnapp</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>ENDeveloperRegion</key>
+	<string>DE</string>
+	<key>ENAPIVersion</key>
+	<integer>1</integer>
 	<key>CFBundleName</key>
 	<string>CoronaWarn</string>
 	<key>CFBundlePackageType</key>

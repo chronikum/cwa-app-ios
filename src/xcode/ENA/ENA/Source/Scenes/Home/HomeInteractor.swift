@@ -19,8 +19,6 @@ import ExposureNotification
 import Foundation
 import UIKit
 
-// swiftlint:disable file_length
-
 final class HomeInteractor: RequiresAppDependencies {
 	typealias SectionDefinition = (section: HomeViewController.Section, cellConfigurators: [CollectionViewCellConfiguratorAny])
 	typealias SectionConfiguration = [SectionDefinition]
@@ -41,9 +39,13 @@ final class HomeInteractor: RequiresAppDependencies {
 	// MARK: Properties
 	var state: State {
 		didSet {
-			homeViewController.setStateOfChildViewControllers()
-			scheduleCountdownTimer()
-			buildSections()
+			if state != oldValue {
+				homeViewController.setStateOfChildViewControllers()
+				// `buildSections()` has to be called prior to `scheduleCountdownTimer()`
+				// because `scheduleCountdownTimer()` relies on the sections to be already built.
+				buildSections()
+				scheduleCountdownTimer()
+			}
 		}
 	}
 
@@ -171,6 +173,10 @@ extension HomeInteractor {
 	}
 
 	func reloadActionSection() {
+		precondition(
+			!sections.isEmpty,
+			"Serious programmer error: reloadActionSection() was called without calling buildSections() first."
+		)
 		sections[0] = setupActionSectionDefinition()
 		homeViewController.reloadData(animatingDifferences: false)
 	}
@@ -212,12 +218,22 @@ extension HomeInteractor {
 			)
 			inactiveConfigurator?.activeAction = inActiveCellActionHandler
 		case .unknownOutdated:
-			inactiveConfigurator = HomeInactiveRiskCellConfigurator(
-				inactiveType: .outdatedResults,
-				previousRiskLevel: store.previousRiskLevel,
-				lastUpdateDate: dateLastExposureDetection
-			)
-			inactiveConfigurator?.activeAction = inActiveCellActionHandler
+			if detectionMode == .automatic {
+				inactiveConfigurator = HomeInactiveRiskCellConfigurator(
+					inactiveType: .outdatedResults,
+					previousRiskLevel: store.previousRiskLevel,
+					lastUpdateDate: dateLastExposureDetection
+				)
+				inactiveConfigurator?.activeAction = inActiveCellActionHandler
+			} else {
+				riskLevelConfigurator = HomeUnknown48hRiskCellConfigurator(
+					isLoading: isRequestRiskRunning,
+					lastUpdateDate: dateLastExposureDetection,
+					detectionInterval: detectionInterval,
+					detectionMode: detectionMode,
+					manualExposureDetectionState: riskProvider.manualExposureDetectionState,
+					previousRiskLevel: store.previousRiskLevel)
+			}
 		case .low:
 			let activeTracing = risk?.details.activeTracing ?? .init(interval: 0)
 			riskLevelConfigurator = HomeLowRiskCellConfigurator(
@@ -238,7 +254,7 @@ extension HomeInteractor {
 				lastUpdateDate: dateLastExposureDetection,
 				manualExposureDetectionState: riskProvider.manualExposureDetectionState,
 				detectionMode: detectionMode,
-				validityDuration: detectionInterval
+				detectionInterval: detectionInterval
 			)
 		case .none:
 			riskLevelConfigurator = nil
@@ -407,11 +423,23 @@ extension HomeInteractor {
 				)
 
 			case .success(let result):
-				let requestTime = Date().timeIntervalSince(requestStart)
-				let delay = requestTime < minRequestTime && self?.testResult == nil ? minRequestTime : 0
-				DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-					self?.testResult = result
-					self?.reloadTestResult(with: result)
+				switch result {
+				case .redeemed:
+					self?.homeViewController.alertError(
+						message: AppStrings.ExposureSubmissionResult.testRedeemedDesc,
+						title: AppStrings.Home.resultCardLoadingErrorTitle,
+						completion: {
+							self?.testResult = .redeemed
+							self?.reloadTestResult(with: .invalid)
+						}
+					)
+				default:
+					let requestTime = Date().timeIntervalSince(requestStart)
+					let delay = requestTime < minRequestTime && self?.testResult == nil ? minRequestTime : 0
+					DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+						self?.testResult = result
+						self?.reloadTestResult(with: result)
+					}
 				}
 			}
 		}
